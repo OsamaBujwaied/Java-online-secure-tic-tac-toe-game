@@ -1,0 +1,120 @@
+package Try2_Challenge;
+ 
+import java.io.*;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import java.net.*;
+import java.util.Scanner;
+import AES.AES;
+import java.util.Base64;
+import java.util.Random;
+
+import javax.crypto.spec.SecretKeySpec;
+
+
+public class Client {
+	public static void main(String[] args) {
+		
+	    String encryptedInput;
+	    String decryptedStr;
+	    
+	    String secretKey;
+
+	    
+		try {
+			//Establish Connection
+			Socket s = new Socket("localhost", 6000);
+			DataInputStream dis = new DataInputStream(s.getInputStream());
+			DataOutputStream dout = new DataOutputStream(s.getOutputStream());
+			Scanner myInput = new Scanner(System.in);
+			String input;
+			
+			//RSA
+			int p_b, q_b, e_b, d_b, N_b;
+			p_b = 5;
+			q_b = 7;
+			N_b = p_b*q_b;	//35
+			e_b = 5;
+			d_b = 29;
+			
+			int e_a, N_a; 		//(N_A,e_A) known to Bob
+			N_a = 33;
+			e_a = 3;
+			
+			//Diffie Hellman Key Exchange
+			int b, g, ga, gb, m, k;
+			g = 2;
+			m = 2^2048 - 2^1984 - 1 + 2^64 *  ((2^1918) + 124476) ;
+			Random rand = new Random();
+			b = rand.nextInt(30);
+			gb = ((int) Math.pow(g, b))% m;
+			System.out.println("b = " + b+" | g^b = " + gb);
+			
+			ga = dis.readInt();
+			System.out.println("g^a = "+ga);
+			dout.writeInt(gb);
+			k = ((int) Math.pow(ga, b))% m;
+			System.out.println("Diffie Hellman Key (g^ba) = "+k);
+			b = 0; 								//Destroy b
+			
+			secretKey = Integer.toString(k); //Diffe_Hellman key
+			
+			
+			// Challenge
+			int R_a, R_b;
+			R_b = 5*rand.nextInt(10) +2;
+			R_a = dis.readInt();
+			dout.writeInt(R_b);
+			System.out.println("R_a = "+R_a + ",\t R_b = "+R_b);
+			if (R_a%10==1)System.out.println("Challenge Verified");
+			else System.out.println("Challenge Refused"); 
+
+
+
+			//Secret Key Generator
+			KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
+			keyGenerator.init(128);
+			SecretKey key = keyGenerator.generateKey();
+			dout.writeUTF(keyToString(key)); 
+			//secretKey = key.toString();
+			System.out.println("AES Secret Key = " + key);
+			
+			//TicToc Initial Table
+			String str = (String) dis.readUTF();
+			System.out.println(str);
+
+			// Game Starting (Start of session)
+			for (int i = 0; i < 4; i++) {
+				str = (String) dis.readUTF();
+				decryptedStr = AES.decrypt(str, secretKey) ;
+				System.out.println(decryptedStr);
+
+				input = myInput.next();
+			    encryptedInput = AES.encrypt(input, secretKey) ;
+				dout.writeUTF(encryptedInput);
+			}
+
+			str = (String) dis.readUTF();
+			System.out.println(str);
+
+			s.close();
+			myInput.close();
+		} catch (Exception e) {
+			System.out.println(e);
+		}	
+	}
+	
+	
+	public static String keyToString(SecretKey secretKey) {
+		byte encoded[] = secretKey.getEncoded();
+		String encodedKey = Base64.getEncoder().encodeToString(encoded);
+		return encodedKey;
+	}
+	public static SecretKey decodeKeyFromString(String keyStr) {
+		byte[] decodedKey = Base64.getDecoder().decode(keyStr);
+		SecretKey secretKey = new SecretKeySpec(decodedKey, 0, decodedKey.length, "AES");
+		return secretKey;
+	}
+
+}
+
